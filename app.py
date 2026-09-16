@@ -11,14 +11,14 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 2. Custom CSS for Professional Look (Safest String Method)
+# 2. Custom CSS for Professional Look (Fixed: unsafe_allow_html=True)
 css_style = """
 <style>
 .metric-box { padding: 15px; border-radius: 8px; background-color: #f0f2f6; margin-bottom: 10px; }
 .stAlert { border-radius: 8px; }
 </style>
 """
-st.markdown(css_style, unsafe_allowed_html=True)
+st.markdown(css_style, unsafe_allow_html=True)
 
 # 3. Data Loading Pipeline (Optimized with Cache)
 @st.cache_data
