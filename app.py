@@ -11,21 +11,18 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for Professional Look (Fixed Syntax)
-st.markdown(
-    """
-    <style>
-    .metric-box { padding: 15px; border-radius: 8px; background-color: #f0f2f6; margin-bottom: 10px; }
-    .stAlert { border-radius: 8px; }
-    </style>
-    """,
-    unsafe_allowed_html=True
-)
+# 2. Custom CSS for Professional Look (Safest String Method)
+css_style = """
+<style>
+.metric-box { padding: 15px; border-radius: 8px; background-color: #f0f2f6; margin-bottom: 10px; }
+.stAlert { border-radius: 8px; }
+</style>
+"""
+st.markdown(css_style, unsafe_allowed_html=True)
 
-# 2. Data Loading Pipeline (Optimized with Cache)
+# 3. Data Loading Pipeline (Optimized with Cache)
 @st.cache_data
 def load_production_data():
-    # Jupyter notebook se bani hui processed file load karna
     df = pd.read_csv("foresight_final_processed.csv")
     return df
 
@@ -35,7 +32,7 @@ except FileNotFoundError:
     st.error("🚨 Error: 'foresight_final_processed.csv' nahi mili! Pehle Jupyter notebook ke saare cells run karein.")
     st.stop()
 
-# 3. Sidebar Control Panel (What-If Scenarios)
+# 4. Sidebar Control Panel (What-If Scenarios)
 st.sidebar.header("⚙️ Supply Chain Stress Test")
 st.sidebar.markdown("Simulate sudden market changes to test inventory resilience.")
 
@@ -48,7 +45,6 @@ demand_multiplier = st.sidebar.slider(
 # Apply what-if logic if user slides the value
 if demand_multiplier > 1.0:
     df['Predicted_Demand'] = (df['Predicted_Demand'] * demand_multiplier).round().astype(int)
-    # Recalculate status based on new high demand
     df['Inventory_Status'] = np.where(df['Quantity'] <= df['Reorder_Point'], '⚠️ REORDER NOW', '✅ STOCK OPTIMAL')
     df['Inventory_Status'] = np.where(df['Quantity'] > (df['Reorder_Point'] * 3), '🚨 OVERSTOCK RISK', df['Inventory_Status'])
 
@@ -66,15 +62,21 @@ if 'Inventory_Status' in df.columns:
 else:
     filtered_df = df
 
-# 4. Main Executive KPI Banner
+# 5. Main Executive KPI Banner
 st.title("🔮 Project FORESIGHT")
 st.subheader("AI-Powered Demand & Inventory Intelligence Platform")
 st.markdown("---")
 
 # Calculating business metrics dynamically
 total_skus = filtered_df['Product_ID'].nunique()
-reorder_count = filtered_df[filtered_df['Inventory_Status'] == '⚠️ REORDER NOW'].shape[0]
-overstock_count = filtered_df[filtered_df['Inventory_Status'] == '🚨 OVERSTOCK RISK'].shape[0]
+
+# Safe row count calculations
+if 'Inventory_Status' in filtered_df.columns:
+    reorder_count = len(filtered_df[filtered_df['Inventory_Status'] == '⚠️ REORDER NOW'])
+    overstock_count = len(filtered_df[filtered_df['Inventory_Status'] == '🚨 OVERSTOCK RISK'])
+else:
+    reorder_count = 0
+    overstock_count = 0
 
 col1, col2, col3 = st.columns(3)
 with col1:
@@ -86,7 +88,7 @@ with col3:
 
 st.markdown("---")
 
-# 5. Interactive Visualizations (Analytics Layout)
+# 6. Interactive Visualizations (Analytics Layout)
 chart_col1, chart_col2 = st.columns(2)
 
 with chart_col1:
@@ -101,7 +103,6 @@ with chart_col1:
 
 with chart_col2:
     st.subheader("🛍️ Stock Levels: Actual vs Predicted Demand")
-    # Top 15 products ka comparison plot
     top_products = filtered_df.groupby('Product_ID')[['Quantity', 'Predicted_Demand']].sum().reset_index().head(15)
     fig_bar = px.bar(top_products, x='Product_ID', y=['Quantity', 'Predicted_Demand'],
                      barmode='group',
@@ -109,12 +110,11 @@ with chart_col2:
                      title="Top 15 Products Stock Comparison")
     st.plotly_chart(fig_bar, use_container_width=True)
 
-# 6. Actionable Operational Table & Export
+# 7. Actionable Operational Table & Export
 st.markdown("---")
 st.subheader("📋 Actionable Procurement & Replenishment Sheet")
 st.markdown("Use this list for daily purchasing approvals and operational stock sorting.")
 
-# Relevant columns showcase for business managers
 display_cols = ['Product_ID', 'Quantity', 'Predicted_Demand', 'Safety_Stock', 'Reorder_Point', 'Inventory_Status']
 st.dataframe(filtered_df[display_cols], use_container_width=True, hide_index=True)
 
