@@ -1,79 +1,126 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.express as px
 
-# 1. Page Configuration Set Up
-st.set_page_config(page_title="Project FORESIGHT", page_icon="🔮", layout="wide")
+# 1. Page Configuration (Industry Level UI)
+st.set_page_config(
+    page_title="Project FORESIGHT - Inventory Intelligence",
+    page_icon="🔮",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-st.title("🔮 Project FORESIGHT")
-st.subheader("AI-Powered Demand Forecasting & Inventory Intelligence Platform")
-st.markdown("---")
+# Custom CSS for Professional Look
+st.markdown("""
+    <style>
+    .metric-box { padding: 15px; border-radius: 8px; background-color: #f0f2f6; margin-bottom: 10px; }
+    .stAlert { border-radius: 8px; }
+    </style>
+""", unsafe_allowed_html=True)
 
-# 2. Load the final processed data
+# 2. Data Loading Pipeline (Optimized with Cache)
 @st.cache_data
-def load_data():
-    data = pd.read_csv("foresight_final_processed.csv")
-    return data
+def load_production_data():
+    # Jupyter notebook se banei hui processed file load karna
+    df = pd.read_csv("foresight_final_processed.csv")
+    return df
 
 try:
-    df = load_data()
-    
-    # 3. Sidebar Filters
-    st.sidebar.header("Platform Navigation Filters")
-    selected_category = st.sidebar.selectbox("Select Product Category", options=["All"] + list(df['Category'].unique()))
-    
-    if selected_category != "All":
-        filtered_df = df[df['Category'] == selected_category]
-    else:
-        filtered_df = df
-
-    # 4. Top Key Performance Indicators (KPIs) Metrics
-    total_sales_val = filtered_df['Sales_Amount'].sum()
-    total_items_sold = filtered_df['Quantity'].sum()
-    avg_lead_time = filtered_df['Actual_Lead_Time'].mean()
-
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total Generated Revenue", f"${total_sales_val:,.2f}")
-    col2.metric("Total Demand Volume (Units)", f"{total_items_sold:,}")
-    col3.metric("Average Supplier Delivery Speed", f"{avg_lead_time:.1f} Days")
-    
-    st.markdown("---")
-
-    # 5. Core Demand Forecasting Analytics Chart
-    st.subheader("📊 Actual Historical Demand vs. AI-Predicted Demand Curve")
-    
-    monthly_trend = filtered_df.groupby('Month')[['Quantity', 'Predicted_Demand']].sum().reset_index()
-    
-    fig = px.line(monthly_trend, x='Month', y=['Quantity', 'Predicted_Demand'],
-                  labels={'value': 'Units Sold / Predicted', 'Month': 'Month of Year'},
-                  title=f"Demand Flow Chart for Category: {selected_category}",
-                  markers=True)
-    
-    st.plotly_chart(fig, use_container_width=True)
-    
-    st.markdown("---")
-
-    # 6. Inventory Intelligence Risk Assessment Console
-    st.subheader("⚠️ Automated Stock Inventory Risk Monitoring Console")
-    
-    item_summary = filtered_df.groupby(['Product_ID', 'Product_Name']).agg(
-        Current_Simulated_Stock=('Quantity', lambda x: int(x.mean() * 1.5)),
-        Reorder_Threshold=('Reorder_Point', 'first'),
-        Safety_Buffer=('Safety_Stock', 'first')
-    ).reset_index()
-
-    def assign_risk_status(row):
-        if row['Current_Simulated_Stock'] <= row['Reorder_Threshold']:
-            return "🚨 CRITICAL STOCKOUT RISK: REORDER NOW"
-        elif row['Current_Simulated_Stock'] > (row['Reorder_Threshold'] * 2.5):
-            return "⚠️ OVERSTOCK RISK: EXCESS HOLDING COSTS"
-        else:
-            return "✅ HEALTHY STOCK LEVEL"
-
-    item_summary['System_Operational_Status'] = item_summary.apply(assign_risk_status, axis=1)
-    
-    st.dataframe(item_summary[['Product_ID', 'Product_Name', 'Current_Simulated_Stock', 'Reorder_Threshold', 'System_Operational_Status']], 
-                 use_container_width=True, hide_index=True)
-
+    df = load_production_data()
 except FileNotFoundError:
-    st.error("Error: Could not locate 'foresight_final_processed.csv'. Keep it in the same folder as app.py.")
+    st.error("🚨 Error: 'foresight_final_processed.csv' nahi mili! Pehle Jupyter notebook ke saare cells run karein.")
+    st.stop()
+
+# 3. Sidebar Control Panel (What-If Scenarios)
+st.sidebar.header("⚙️ Supply Chain Stress Test")
+st.sidebar.markdown("Simulate sudden market changes to test inventory resilience.")
+
+# Demand Surge Slider (What-if analysis)
+demand_multiplier = st.sidebar.slider(
+    "Simulate Demand Surge (Festival/Promo Season)", 
+    min_value=1.0, max_value=2.5, value=1.0, step=0.1
+)
+
+# Apply what-if logic if user slides the value
+if demand_multiplier > 1.0:
+    df['Predicted_Demand'] = (df['Predicted_Demand'] * demand_multiplier).round().astype(int)
+    # Recalculate status based on new high demand
+    df['Inventory_Status'] = np.where(df['Quantity'] <= df['Reorder_Point'], '⚠️ REORDER NOW', '✅ STOCK OPTIMAL')
+    df['Inventory_Status'] = np.where(df['Quantity'] > (df['Reorder_Point'] * 3), '🚨 OVERSTOCK RISK', df['Inventory_Status'])
+
+# Filter by Risk Status
+st.sidebar.subheader("🎯 Filter Dashboard")
+status_filter = st.sidebar.multiselect(
+    "Select Inventory Status to View:",
+    options=df['Inventory_Status'].unique(),
+    default=df['Inventory_Status'].unique()
+)
+filtered_df = df[df['inventory_status'].isin(status_filter)] if 'inventory_status' in df.columns else df[df['Inventory_Status'].isin(status_filter)]
+
+# 4. Main Executive KPI Banner
+st.title("🔮 Project FORESIGHT")
+st.subheader("AI-Powered Demand & Inventory Intelligence Platform")
+st.markdown("---")
+
+# Calculating business metrics dynamically
+total_skus = filtered_df['Product_ID'].nunique()
+reorder_count = filtered_df[filtered_df['Inventory_Status'] == '⚠️ REORDER NOW'].shape[0]
+overstock_count = filtered_df[filtered_df['Inventory_Status'] == '🚨 OVERSTOCK RISK'].shape[0]
+
+col1, col2, col3 = st.columns(3)
+with col1:
+    st.metric(label="📊 Total Monitored SKUs", value=f"{total_skus:,}")
+with col2:
+    st.metric(label="⚠️ Critical Reorder Alerts", value=f"{reorder_count:,}", delta="Action Required", delta_color="inverse" if reorder_count > 0 else "normal")
+with col3:
+    st.metric(label="🚨 Overstock Risks Detected", value=f"{overstock_count:,}", delta="Capital Tied Up", delta_color="off")
+
+st.markdown("---")
+
+# 5. Interactive Visualizations (Analytics Layout)
+chart_col1, chart_col2 = st.columns(2)
+
+with chart_col1:
+    st.subheader("📈 Inventory Risk Distribution")
+    status_counts = filtered_df['Inventory_Status'].value_counts().reset_index()
+    status_counts.columns = ['Status', 'Count']
+    fig_pie = px.pie(status_counts, values='Count', names='Status', 
+                     color='Status',
+                     color_discrete_map={'✅ STOCK OPTIMAL':'#2ca02c', '⚠️ REORDER NOW':'#ff7f0e', '🚨 OVERSTOCK RISK':'#d62728'},
+                     hole=0.4)
+    st.plotly_chart(fig_pie, use_container_width=True)
+
+with chart_col2:
+    st.subheader("🛍️ Stock Levels: Actual vs Predicted Demand")
+    # Top 15 products ka comparison plot
+    top_products = filtered_df.groupby('Product_ID')[['Quantity', 'Predicted_Demand']].sum().reset_index().head(15)
+    fig_bar = px.bar(top_products, x='Product_ID', y=['Quantity', 'Predicted_Demand'],
+                     barmode='group',
+                     labels={'value': 'Units', 'variable': 'Metric'},
+                     title="Top 15 Products Stock Comparison")
+    st.plotly_chart(fig_bar, use_container_width=True)
+
+# 6. Actionable Operational Table & Export
+st.markdown("---")
+st.subheader("📋 Actionable Procurement & Replenishment Sheet")
+st.markdown("Use this list for daily purchasing approvals and operational stock sorting.")
+
+# Relevant columns showcase for business managers
+display_cols = ['Product_ID', 'Quantity', 'Predicted_Demand', 'Safety_Stock', 'Reorder_Point', 'Inventory_Status']
+st.dataframe(filtered_df[display_cols], use_container_width=True, hide_index=True)
+
+# Enterprise Export to CSV Feature
+@st.cache_data
+def convert_df_to_csv(dataframe):
+    return dataframe[display_cols].to_csv(index=False).encode('utf-8')
+
+csv_data = convert_df_to_csv(filtered_df)
+
+st.download_button(
+    label="📥 Export Procurement Action Plan to CSV",
+    data=csv_data,
+    file_name="foresight_replenishment_report.csv",
+    mime="text/csv",
+    use_container_width=True
+)
