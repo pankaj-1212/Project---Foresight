@@ -59,7 +59,7 @@ def load_production_data():
     if 'Reorder_Point' not in df.columns:
         df['Reorder_Point'] = (df['Quantity'] * 0.4)
         
-    # --- INDUSTRY UPGRADE: Rounding float predictions to whole integers ---
+    # Rounding float predictions to whole integers
     for numeric_col in ['Predicted_Demand', 'Safety_Stock', 'Reorder_Point', 'Quantity']:
         if numeric_col in df.columns:
             df[numeric_col] = pd.to_numeric(df[numeric_col], errors='coerce').fillna(0).round().astype(int)
@@ -88,13 +88,22 @@ if demand_multiplier > 1.0:
     df['Inventory_Status'] = np.where(df['Quantity'] <= df['Reorder_Point'], '⚠️ REORDER NOW', '✅ STOCK OPTIMAL')
     df['Inventory_Status'] = np.where(df['Quantity'] > (df['Reorder_Point'] * 3), '🚨 OVERSTOCK RISK', df['Inventory_Status'])
 
-# Filter by Risk Status
+# --- IMPROVED SIDEBAR FILTER (Fixes the "No Results" empty state box) ---
 st.sidebar.subheader("🎯 Filter Dashboard")
+
+# Hamesha teeno options standard parameters ki tarah check karne ke liye rakhna
+all_possible_status = ['✅ STOCK OPTIMAL', '⚠️ REORDER NOW', '🚨 OVERSTOCK RISK']
 status_options = list(df['Inventory_Status'].unique())
+
+# Ensure all options exist in selection list to avoid empty drop-downs
+for item in all_possible_status:
+    if item not in status_options:
+        status_options.append(item)
+
 status_filter = st.sidebar.multiselect(
     "Select Inventory Status to View:",
     options=status_options,
-    default=status_options
+    default=list(df['Inventory_Status'].unique()) # Sirf jo data me hai wo default select rahega
 )
 
 filtered_df = df[df['Inventory_Status'].isin(status_filter)]
@@ -105,9 +114,9 @@ st.subheader("AI-Powered Demand & Inventory Intelligence Platform")
 st.markdown("---")
 
 # Calculating business metrics dynamically
-total_skus = filtered_df['Product_ID'].nunique()
-reorder_count = len(filtered_df[filtered_df['Inventory_Status'] == '⚠️ REORDER NOW'])
-overstock_count = len(filtered_df[filtered_df['Inventory_Status'] == '🚨 OVERSTOCK RISK'])
+total_skus = filtered_df['Product_ID'].nunique() if not filtered_df.empty else 0
+reorder_count = len(filtered_df[filtered_df['Inventory_Status'] == '⚠️ REORDER NOW']) if not filtered_df.empty else 0
+overstock_count = len(filtered_df[filtered_df['Inventory_Status'] == '🚨 OVERSTOCK RISK']) if not filtered_df.empty else 0
 
 col1, col2, col3 = st.columns(3)
 with col1:
@@ -120,26 +129,29 @@ with col3:
 st.markdown("---")
 
 # 6. Interactive Visualizations (Analytics Layout)
-chart_col1, chart_col2 = st.columns(2)
+if not filtered_df.empty:
+    chart_col1, chart_col2 = st.columns(2)
 
-with chart_col1:
-    st.subheader("📈 Inventory Risk Distribution")
-    status_counts = filtered_df['Inventory_Status'].value_counts().reset_index()
-    status_counts.columns = ['Status', 'Count']
-    fig_pie = px.pie(status_counts, values='Count', names='Status', 
-                     color='Status',
-                     color_discrete_map={'✅ STOCK OPTIMAL':'#2ca02c', '⚠️ REORDER NOW':'#ff7f0e', '🚨 OVERSTOCK RISK':'#d62728'},
-                     hole=0.4)
-    st.plotly_chart(fig_pie, use_container_width=True)
+    with chart_col1:
+        st.subheader("📈 Inventory Risk Distribution")
+        status_counts = filtered_df['Inventory_Status'].value_counts().reset_index()
+        status_counts.columns = ['Status', 'Count']
+        fig_pie = px.pie(status_counts, values='Count', names='Status', 
+                         color='Status',
+                         color_discrete_map={'✅ STOCK OPTIMAL':'#2ca02c', '⚠️ REORDER NOW':'#ff7f0e', '🚨 OVERSTOCK RISK':'#d62728'},
+                         hole=0.4)
+        st.plotly_chart(fig_pie, use_container_width=True)
 
-with chart_col2:
-    st.subheader("🛍️ Stock Levels: Actual vs Predicted Demand")
-    top_products = filtered_df.groupby('Product_ID')[['Quantity', 'Predicted_Demand']].sum().reset_index().head(15)
-    fig_bar = px.bar(top_products, x='Product_ID', y=['Quantity', 'Predicted_Demand'],
-                     barmode='group',
-                     labels={'value': 'Units', 'variable': 'Metric'},
-                     title="Top 15 Products Stock Comparison")
-    st.plotly_chart(fig_bar, use_container_width=True)
+    with chart_col2:
+        st.subheader("🛍️ Stock Levels: Actual vs Predicted Demand")
+        top_products = filtered_df.groupby('Product_ID')[['Quantity', 'Predicted_Demand']].sum().reset_index().head(15)
+        fig_bar = px.bar(top_products, x='Product_ID', y=['Quantity', 'Predicted_Demand'],
+                         barmode='group',
+                         labels={'value': 'Units', 'variable': 'Metric'},
+                         title="Top 15 Products Stock Comparison")
+        st.plotly_chart(fig_bar, use_container_width=True)
+else:
+    st.warning("⚠️ Selected status filters ke liye koi data available nahi hai. Kripya sidebar se filter badlein.")
 
 # 7. Actionable Operational Table & Export
 st.markdown("---")
@@ -147,19 +159,21 @@ st.subheader("📋 Actionable Procurement & Replenishment Sheet")
 st.markdown("Use this list for daily purchasing approvals and operational stock sorting.")
 
 display_cols = ['Product_ID', 'Quantity', 'Predicted_Demand', 'Safety_Stock', 'Reorder_Point', 'Inventory_Status']
-st.dataframe(filtered_df[display_cols], use_container_width=True, hide_index=True)
 
-# Enterprise Export to CSV Feature
-@st.cache_data
-def convert_df_to_csv(dataframe):
-    return dataframe[display_cols].to_csv(index=False).encode('utf-8')
+if not filtered_df.empty:
+    st.dataframe(filtered_df[display_cols], use_container_width=True, hide_index=True)
 
-csv_data = convert_df_to_csv(filtered_df)
+    # Enterprise Export to CSV Feature
+    @st.cache_data
+    def convert_df_to_csv(dataframe):
+        return dataframe[display_cols].to_csv(index=False).encode('utf-8')
 
-st.download_button(
-    label="📥 Export Procurement Action Plan to CSV",
-    data=csv_data,
-    file_name="foresight_replenishment_report.csv",
-    mime="text/csv",
-    use_container_width=True
+    csv_data = convert_df_to_csv(filtered_df)
+
+    st.download_button(
+        label="📥 Export Procurement Action Plan to CSV",
+        data=csv_data,
+        file_name="foresight_replenishment_report.csv",
+        mime="text/csv",
+        use_container_width=True
 )
