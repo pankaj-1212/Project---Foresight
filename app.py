@@ -11,18 +11,21 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for Professional Look
-st.markdown("""
+# Custom CSS for Professional Look (Fixed Syntax)
+st.markdown(
+    """
     <style>
     .metric-box { padding: 15px; border-radius: 8px; background-color: #f0f2f6; margin-bottom: 10px; }
     .stAlert { border-radius: 8px; }
     </style>
-""", unsafe_allowed_html=True)
+    """,
+    unsafe_allowed_html=True
+)
 
 # 2. Data Loading Pipeline (Optimized with Cache)
 @st.cache_data
 def load_production_data():
-    # Jupyter notebook se banei hui processed file load karna
+    # Jupyter notebook se bani hui processed file load karna
     df = pd.read_csv("foresight_final_processed.csv")
     return df
 
@@ -56,7 +59,12 @@ status_filter = st.sidebar.multiselect(
     options=df['Inventory_Status'].unique(),
     default=df['Inventory_Status'].unique()
 )
-filtered_df = df[df['inventory_status'].isin(status_filter)] if 'inventory_status' in df.columns else df[df['Inventory_Status'].isin(status_filter)]
+
+# Safe filtering approach
+if 'Inventory_Status' in df.columns:
+    filtered_df = df[df['Inventory_Status'].isin(status_filter)]
+else:
+    filtered_df = df
 
 # 4. Main Executive KPI Banner
 st.title("🔮 Project FORESIGHT")
@@ -72,7 +80,7 @@ col1, col2, col3 = st.columns(3)
 with col1:
     st.metric(label="📊 Total Monitored SKUs", value=f"{total_skus:,}")
 with col2:
-    st.metric(label="⚠️ Critical Reorder Alerts", value=f"{reorder_count:,}", delta="Action Required", delta_color="inverse" if reorder_count > 0 else "normal")
+    st.metric(label="⚠️ Critical Reorder Alerts", value=f"{reorder_count:,}", delta="Action Required" if reorder_count > 0 else "Normal", delta_color="inverse" if reorder_count > 0 else "normal")
 with col3:
     st.metric(label="🚨 Overstock Risks Detected", value=f"{overstock_count:,}", delta="Capital Tied Up", delta_color="off")
 
