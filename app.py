@@ -11,7 +11,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 2. Custom CSS for Professional Look (Fixed: unsafe_allow_html=True)
+# 2. Custom CSS for Professional Look
 css_style = """
 <style>
 .metric-box { padding: 15px; border-radius: 8px; background-color: #f0f2f6; margin-bottom: 10px; }
@@ -24,6 +24,41 @@ st.markdown(css_style, unsafe_allow_html=True)
 @st.cache_data
 def load_production_data():
     df = pd.read_csv("foresight_final_processed.csv")
+    
+    # Clean Column Names to handle casing issues dynamically
+    df.columns = [col.strip() for col in df.columns]
+    
+    # Sahi column match karne ke liye custom mapping checking
+    rename_dict = {}
+    for col in df.columns:
+        if col.lower() == 'inventory_status':
+            rename_dict[col] = 'Inventory_Status'
+        elif col.lower() == 'predicted_demand':
+            rename_dict[col] = 'Predicted_Demand'
+        elif col.lower() == 'safety_stock':
+            rename_dict[col] = 'Safety_Stock'
+        elif col.lower() == 'reorder_point':
+            rename_dict[col] = 'Reorder_Point'
+            
+    if rename_dict:
+        df = df.rename(columns=rename_dict)
+        
+    # Agar kisi wajah se column fir bhi nahi bana, toh yahan automatic logic safely fill kar dega
+    if 'Inventory_Status' not in df.columns:
+        conditions = [
+            (df['Quantity'] <= df.get('Reorder_Point', df['Quantity'] * 0.5)),
+            (df['Quantity'] > (df.get('Reorder_Point', df['Quantity'] * 0.5) * 3))
+        ]
+        choices = ['⚠️ REORDER NOW', '🚨 OVERSTOCK RISK']
+        df['Inventory_Status'] = np.select(conditions, choices, default='✅ STOCK OPTIMAL')
+        
+    if 'Predicted_Demand' not in df.columns:
+        df['Predicted_Demand'] = df['Quantity'].round().astype(int)
+    if 'Safety_Stock' not in df.columns:
+        df['Safety_Stock'] = (df['Quantity'] * 0.2).round().astype(int)
+    if 'Reorder_Point' not in df.columns:
+        df['Reorder_Point'] = (df['Quantity'] * 0.4).round().astype(int)
+        
     return df
 
 try:
@@ -50,17 +85,14 @@ if demand_multiplier > 1.0:
 
 # Filter by Risk Status
 st.sidebar.subheader("🎯 Filter Dashboard")
+status_options = list(df['Inventory_Status'].unique())
 status_filter = st.sidebar.multiselect(
     "Select Inventory Status to View:",
-    options=df['Inventory_Status'].unique(),
-    default=df['Inventory_Status'].unique()
+    options=status_options,
+    default=status_options
 )
 
-# Safe filtering approach
-if 'Inventory_Status' in df.columns:
-    filtered_df = df[df['Inventory_Status'].isin(status_filter)]
-else:
-    filtered_df = df
+filtered_df = df[df['Inventory_Status'].isin(status_filter)]
 
 # 5. Main Executive KPI Banner
 st.title("🔮 Project FORESIGHT")
@@ -69,14 +101,8 @@ st.markdown("---")
 
 # Calculating business metrics dynamically
 total_skus = filtered_df['Product_ID'].nunique()
-
-# Safe row count calculations
-if 'Inventory_Status' in filtered_df.columns:
-    reorder_count = len(filtered_df[filtered_df['Inventory_Status'] == '⚠️ REORDER NOW'])
-    overstock_count = len(filtered_df[filtered_df['Inventory_Status'] == '🚨 OVERSTOCK RISK'])
-else:
-    reorder_count = 0
-    overstock_count = 0
+reorder_count = len(filtered_df[filtered_df['Inventory_Status'] == '⚠️ REORDER NOW'])
+overstock_count = len(filtered_df[filtered_df['Inventory_Status'] == '🚨 OVERSTOCK RISK'])
 
 col1, col2, col3 = st.columns(3)
 with col1:
