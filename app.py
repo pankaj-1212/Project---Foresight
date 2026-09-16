@@ -43,7 +43,7 @@ def load_production_data():
     if rename_dict:
         df = df.rename(columns=rename_dict)
         
-    # Agar kisi wajah se column fir bhi nahi bana, toh yahan automatic logic safely fill kar dega
+    # Automatic fallback configurations
     if 'Inventory_Status' not in df.columns:
         conditions = [
             (df['Quantity'] <= df.get('Reorder_Point', df['Quantity'] * 0.5)),
@@ -53,11 +53,16 @@ def load_production_data():
         df['Inventory_Status'] = np.select(conditions, choices, default='✅ STOCK OPTIMAL')
         
     if 'Predicted_Demand' not in df.columns:
-        df['Predicted_Demand'] = df['Quantity'].round().astype(int)
+        df['Predicted_Demand'] = df['Quantity']
     if 'Safety_Stock' not in df.columns:
-        df['Safety_Stock'] = (df['Quantity'] * 0.2).round().astype(int)
+        df['Safety_Stock'] = (df['Quantity'] * 0.2)
     if 'Reorder_Point' not in df.columns:
-        df['Reorder_Point'] = (df['Quantity'] * 0.4).round().astype(int)
+        df['Reorder_Point'] = (df['Quantity'] * 0.4)
+        
+    # --- INDUSTRY UPGRADE: Rounding float predictions to whole integers ---
+    for numeric_col in ['Predicted_Demand', 'Safety_Stock', 'Reorder_Point', 'Quantity']:
+        if numeric_col in df.columns:
+            df[numeric_col] = pd.to_numeric(df[numeric_col], errors='coerce').fillna(0).round().astype(int)
         
     return df
 
